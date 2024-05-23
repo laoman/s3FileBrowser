@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>S3 Files</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>S3 Files Browser</h1>
+            <nav>
+                <ul>
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/logs">View Application Logs</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+    <div class="container">
+        <h2>Files in S3 Bucket</h2>
+        {% if files %}
+            {% for folder, files in files.items() %}
+                <h3>{{ folder }}</h3>
+                <ul class="files">
+                    {% for file in files %}
+                        <li><a href="{{ url_for('view_file', filename=file) }}">{{ file }}</a></li>
+                    {% endfor %}
+                </ul>
+            {% endfor %}
+        {% else %}
+            <p>No files found in the S3 bucket.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

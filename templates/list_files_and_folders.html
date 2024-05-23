@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S3 Files and Folders</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .folder, .file {
+            display: flex;
+            align-items: center;
+        }
+        .folder-icon, .file-icon {
+            margin-right: 10px;
+        }
+        .breadcrumb {
+            background-color: #f8f9fa;
+            margin-bottom: 20px;
+        }
+        .breadcrumb-item + .breadcrumb-item::before {
+            content: ">";
+        }
+        .modal-dialog {
+            max-width: 98%;
+            margin: 1.75rem auto;
+        }
+        .modal-content {
+        min-height: 80vh;
+        }
+
+        .modal-body {
+            height: 78vh; /* Adjust this value as needed */
+            overflow-y: auto;
+        }
+
+        .pre-scrollable {
+            /* Remove max-height to allow content to expand */
+            max-height: none;
+        }
+
+        #fileContent {
+            height: 100%; /* Ensure the content fills the entire modal body */
+        }
+</style>
+
+
+
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-4">S3 Files and Folders</h1>
+        
+        <form class="form-inline my-4" method="GET" action="/">
+            <label class="sr-only" for="root_folder">Enter Root Folder</label>
+            <input type="text" class="form-control mb-2 mr-sm-2" id="root_folder" name="root_folder" value="{{ root_prefix }}" placeholder="Enter Root Folder">
+            <button type="submit" class="btn btn-primary mb-2">Go</button>
+        </form>
+        
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                {% if root_prefix %}
+                    <li class="breadcrumb-item"><a href="/">Home</a></li>
+                    {% for part in root_prefix.split('/')[:-1] %}
+                        <li class="breadcrumb-item"><a href="?root_folder={{ part }}/">{{ part }}</a></li>
+                    {% endfor %}
+                    <li class="breadcrumb-item active" aria-current="page">{{ root_prefix.split('/')[-2] }}</li>
+                {% else %}
+                    <li class="breadcrumb-item active" aria-current="page">Home</li>
+                {% endif %}
+            </ol>
+        </nav>
+
+        <div class="list-group" id="folders">
+            <h2>Folders</h2>
+            {% if folders %}
+                {% for folder in folders %}
+                    <a href="?root_folder={{ folder['Prefix'] }}" class="list-group-item list-group-item-action folder">
+                        <span class="folder-icon">📁</span>{{ folder['Prefix'].split('/')[-2] }}
+                    </a>
+                {% endfor %}
+            {% else %}
+                <p>No folders found.</p>
+            {% endif %}
+        </div>
+        
+        <div class="list-group mt-4">
+            <h2>Files</h2>
+            {% if files %}
+                {% for file in files %}
+                    <a href="#" class="list-group-item list-group-item-action file" data-toggle="modal" data-target="#fileContentModal" data-key="{{ file['Key'] }}">
+                        <span class="file-icon">📄</span>{{ file['Key'] }}
+                    </a>
+                {% endfor %}
+            {% else %}
+                <p>No files found.</p>
+            {% endif %}
+        </div>
+
+        <!-- Modal for displaying file content -->
+        <div class="modal fade" id="fileContentModal" tabindex="-1" role="dialog" aria-labelledby="fileContentModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="fileContentModalLabel">File Content</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="text" id="filterInput" class="form-control mb-2" placeholder="Filter Content...">
+                        <pre id="fileContent" class="pre-scrollable"></pre>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+
+
+    <script>
+        $('#fileContentModal').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget);
+            var fileKey = button.data('key');
+            
+            var modal = $(this);
+            modal.find('.modal-title').text('File Content: ' + fileKey);
+            modal.find('#fileContent').text('Loading...');
+            
+            $.ajax({
+                url: '/file-content',
+                method: 'GET',
+                data: { file_key: fileKey },
+                success: function (data) {
+                    if (data.error) {
+                        modal.find('#fileContent').text('Error: ' + data.error);
+                    } else {
+                        modal.data('original-content', data.content); // Store original content
+                        modal.find('#fileContent').text(data.content);
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    modal.find('#fileContent').text('Error: ' + errorThrown);
+                }
+            });
+        });
+    
+        // Filter content in modal
+        $('#filterInput').on('input', function() {
+            var filter = $(this).val().toUpperCase();
+            var originalContent = $('#fileContentModal').data('original-content');
+            var content = originalContent.split('\n').filter(function(line) {
+                return line.toUpperCase().indexOf(filter) > -1;
+            }).join('\n');
+            $('#fileContent').text(content);
+            
+            // Recursively search through all files and folders
+            $('.list-group-item').each(function() {
+                var text = $(this).text().toUpperCase();
+                if (text.indexOf(filter) > -1) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+        });
+
+        $('#root_folder').on('input', function() {
+            var filter = $(this).val();
+
+            // Make an AJAX request to the server to filter folders
+            $.ajax({
+                url: '/search-folders',
+                method: 'GET',
+                data: { filter: filter },
+                success: function(data) {
+                    // Recreate the folder structure based on the response
+                    var foldersContainer = $('#folders');
+                    foldersContainer.empty(); // Clear previous folders
+                    if (data.length > 0) {
+                        data.forEach(function(folder) {
+                            var folderName = folder.split('/').slice(-2, -1)[0];
+                            var folderLink = $('<a>')
+                                .attr('href', '?root_folder=' + folder)
+                                .addClass('list-group-item list-group-item-action folder')
+                                .append($('<span>').addClass('folder-icon').text('📁'))
+                                .append(folderName);
+                            foldersContainer.append(folderLink);
+                        });
+                    } else {
+                        foldersContainer.append($('<p>').text('No folders found.'));
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('AJAX request failed:', errorThrown);
+                }
+            });
+        });
+
+    </script>
+    
+    
+</body>
+</html>
